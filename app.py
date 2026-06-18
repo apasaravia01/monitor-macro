@@ -522,31 +522,26 @@ add_row(
     "Oficial"
 )
 
-# 5. Inflación mensual USA
-def inflacion_mensual_usa():
-    try:
-        url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCSL"
-        df_cpi = pd.read_csv(url)
-        df_cpi = df_cpi.rename(columns={
-            "observation_date": "fecha",
-            "CPIAUCSL": "cpi"
-        })
-        df_cpi["cpi"] = pd.to_numeric(df_cpi["cpi"], errors="coerce")
-        df_cpi = df_cpi.dropna()
-        df_cpi = df_cpi.sort_values("fecha")
-        ultimo = df_cpi.iloc[-1]
-        previo = df_cpi.iloc[-2]
-        inflacion = ((ultimo["cpi"] / previo["cpi"]) - 1) * 100
-        return inflacion, ultimo["fecha"]
-    except Exception:
-        return None, ""
-inflacion_us, fecha_inflacion_us = inflacion_mensual_usa()
+# 5. Inflación mensual
+cpi = fred_last_two("CPIAUCSL")
+
+if cpi is not None and len(cpi) == 2:
+    cpi_prev = float(cpi.iloc[0]["CPIAUCSL"])
+    cpi_last = float(cpi.iloc[1]["CPIAUCSL"])
+    fecha_cpi = str(cpi.iloc[1]["observation_date"])
+
+    inflacion_mensual = ((cpi_last / cpi_prev) - 1) * 100
+    inflacion_mensual_txt = f"{inflacion_mensual:.2f}"
+else:
+    inflacion_mensual_txt = "No disponible"
+    fecha_cpi = ""
+
 add_row(
     filas_us,
     "Inflación mensual",
-    fmt_pct(inflacion_us) if inflacion_us is not None else "No disponible",
+    inflacion_mensual_txt,
     "%",
-    fecha_inflacion_us,
+    fecha_cpi,
     "Mensual",
     "FRED / BLS - CPIAUCSL",
     "Oficial"
