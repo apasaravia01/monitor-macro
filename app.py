@@ -115,20 +115,26 @@ agregar_bcra(
         "pases pasivos",
         "tasa de pases"
     ],
-    "% TNA",
-    "Diaria",
-    porcentaje=True,
-    no_cero=True
-)
-
-agregar_bcra(
-    filas,
-    "Inflación mensual",
-    ["inflación mensual", "inflacion mensual"],
-    "%",
-    "Mensual",
-    porcentaje=True
-)
+    if tasa_oficial:
+        filas.append({
+            "Indicador": "Tasa de interés oficial / política monetaria",
+            "Valor": tasa_oficial["ultValorInformado"],
+            "Unidad": "%",
+            "Fecha dato": tasa_oficial["ultFechaInformada"],
+            "Periodicidad": "Diaria",
+            "Fuente": "BCRA oficial",
+            "Tipo fuente": "Oficial"
+        })
+    else:
+        filas.append({
+            "Indicador": "Tasa de interés oficial / política monetaria",
+            "Valor": "No disponible",
+            "Unidad": "%",
+            "Fecha dato": "",
+            "Periodicidad": "Diaria",
+            "Fuente": "BCRA oficial",
+            "Tipo fuente": "Oficial"
+        })
 
 try:
     desempleo = serie_datos_gob("45.2_ECTDT_0_T_33")
