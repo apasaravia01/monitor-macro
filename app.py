@@ -297,6 +297,8 @@ st.markdown("""
 
 st.subheader("Uruguay")
 
+import re
+
 def banco_mundial_uruguay(indicator):
     try:
         url = f"https://api.worldbank.org/v2/country/URY/indicator/{indicator}"
@@ -310,6 +312,51 @@ def banco_mundial_uruguay(indicator):
         for item in data:
             if item.get("value") is not None:
                 return item
+
+        return None
+    except Exception:
+        return None
+
+def tipo_cambio_uy_dgi():
+    try:
+        url = "https://www.gub.uy/direccion-general-impositiva/datos-y-estadisticas/datos/cotizaciones-interbancarias"
+        r = requests.get(url, timeout=30)
+        r.raise_for_status()
+        texto = r.text
+
+        # Busca valores tipo 38,8150 / 38.8150 en la página oficial
+        valores = re.findall(r"\b\d{2}[,.]\d{3,4}\b", texto)
+        valores = [float(v.replace(",", ".")) for v in valores]
+
+        # Filtra valores razonables para UYU/USD
+        valores = [v for v in valores if 20 <= v <= 80]
+
+        if len(valores) >= 2:
+            actual = valores[-1]
+            previo = valores[-2]
+            variacion = ((actual / previo) - 1) * 100 if previo != 0 else None
+            return actual, variacion
+
+        if len(valores) == 1:
+            return valores[-1], None
+
+        return None, None
+    except Exception:
+        return None, None
+
+def tasa_politica_uruguay():
+    try:
+        url = "https://www.bcu.gub.uy/Politica-Economica-y-Mercados/Paginas/Tasa-1-Dia.aspx"
+        r = requests.get(url, timeout=30)
+        r.raise_for_status()
+        texto = r.text
+
+        # Busca porcentajes tipo 5,75% / 5.75%
+        tasas = re.findall(r"\b\d{1,2}[,.]\d{1,2}\s*%", texto)
+
+        if tasas:
+            tasa = tasas[0].replace("%", "").replace(",", ".").strip()
+            return float(tasa)
 
         return None
     except Exception:
@@ -330,44 +377,46 @@ add_row(
     "Organismo internacional"
 )
 
-# 2. Tipo de cambio UYU/USD
-tc_uy = banco_mundial_uruguay("PA.NUS.FCRF")
+# 2. Tipo de cambio UYU/USD y variación diaria
+tc_uy_valor, tc_uy_variacion = tipo_cambio_uy_dgi()
+
 add_row(
     filas_uy,
     "Tipo de cambio UYU/USD",
-    fmt_num(tc_uy.get("value")) if tc_uy else "No disponible",
+    fmt_num(tc_uy_valor) if tc_uy_valor else "No disponible",
     "UYU por USD",
-    tc_uy.get("date", "") if tc_uy else "",
-    "Anual",
-    "Banco Mundial",
-    "Organismo internacional"
-)
-
-# 3. Variación diaria tipo de cambio
-add_row(
-    filas_uy,
-    "Variación diaria tipo de cambio",
-    "No disponible",
-    "%",
-    "",
+    datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d"),
     "Diaria",
-    "Pendiente de fuente diaria verificable",
-    "No disponible"
-)
-
-# 4. Tasa de interés oficial
-add_row(
-    filas_uy,
-    "Tasa de interés oficial / política monetaria",
-    "No disponible",
-    "% TNA",
-    "",
-    "Según decisión COPOM",
-    "BCU oficial",
+    "DGI / Cotizaciones interbancarias",
     "Oficial"
 )
 
-# 5. Inflación
+add_row(
+    filas_uy,
+    "Variación diaria tipo de cambio",
+    fmt_pct(tc_uy_variacion) if tc_uy_variacion is not None else "No disponible",
+    "%",
+    datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d"),
+    "Diaria",
+    "DGI / Cotizaciones interbancarias",
+    "Oficial"
+)
+
+# 3. Tasa de interés oficial / política monetaria
+tasa_uy = tasa_politica_uruguay()
+
+add_row(
+    filas_uy,
+    "Tasa de interés oficial / política monetaria",
+    fmt_pct(tasa_uy) if tasa_uy is not None else "No disponible",
+    "% TNA",
+    datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d"),
+    "Diaria",
+    "BCU / Tasa 1 Día",
+    "Oficial"
+)
+
+# 4. Inflación
 inflacion_uy = banco_mundial_uruguay("FP.CPI.TOTL.ZG")
 add_row(
     filas_uy,
@@ -380,7 +429,7 @@ add_row(
     "Organismo internacional"
 )
 
-# 6. Desempleo
+# 5. Desempleo
 desempleo_uy = banco_mundial_uruguay("SL.UEM.TOTL.ZS")
 add_row(
     filas_uy,
@@ -393,7 +442,7 @@ add_row(
     "Organismo internacional"
 )
 
-# 7. PBI nominal
+# 6. PBI nominal
 pbi_uy = banco_mundial_uruguay("NY.GDP.MKTP.CD")
 add_row(
     filas_uy,
