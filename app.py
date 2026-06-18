@@ -291,3 +291,121 @@ st.markdown("""
 - datos.gob.ar / INDEC: series públicas.
 - Banco Mundial: PBI nominal en USD corrientes.
 """)
+# =========================
+# URUGUAY
+# =========================
+
+st.subheader("Uruguay")
+
+def banco_mundial_uruguay(indicator):
+    try:
+        url = f"https://api.worldbank.org/v2/country/URY/indicator/{indicator}"
+        js = get_json(url, {
+            "format": "json",
+            "mrnev": 1
+        })
+
+        data = js[1] if isinstance(js, list) and len(js) > 1 else []
+
+        for item in data:
+            if item.get("value") is not None:
+                return item
+
+        return None
+    except Exception:
+        return None
+
+filas_uy = []
+
+# 1. Reservas internacionales
+reservas_uy = banco_mundial_uruguay("FI.RES.TOTL.CD")
+add_row(
+    filas_uy,
+    "Reservas internacionales",
+    fmt_num(reservas_uy.get("value")) if reservas_uy else "No disponible",
+    "USD corrientes",
+    reservas_uy.get("date", "") if reservas_uy else "",
+    "Anual",
+    "Banco Mundial",
+    "Organismo internacional"
+)
+
+# 2. Tipo de cambio UYU/USD
+tc_uy = banco_mundial_uruguay("PA.NUS.FCRF")
+add_row(
+    filas_uy,
+    "Tipo de cambio UYU/USD",
+    fmt_num(tc_uy.get("value")) if tc_uy else "No disponible",
+    "UYU por USD",
+    tc_uy.get("date", "") if tc_uy else "",
+    "Anual",
+    "Banco Mundial",
+    "Organismo internacional"
+)
+
+# 3. Variación diaria tipo de cambio
+add_row(
+    filas_uy,
+    "Variación diaria tipo de cambio",
+    "No disponible",
+    "%",
+    "",
+    "Diaria",
+    "Pendiente de fuente diaria verificable",
+    "No disponible"
+)
+
+# 4. Tasa de interés oficial
+add_row(
+    filas_uy,
+    "Tasa de interés oficial / política monetaria",
+    "No disponible",
+    "% TNA",
+    "",
+    "Según decisión COPOM",
+    "BCU oficial",
+    "Oficial"
+)
+
+# 5. Inflación
+inflacion_uy = banco_mundial_uruguay("FP.CPI.TOTL.ZG")
+add_row(
+    filas_uy,
+    "Inflación anual",
+    fmt_pct(inflacion_uy.get("value")) if inflacion_uy else "No disponible",
+    "%",
+    inflacion_uy.get("date", "") if inflacion_uy else "",
+    "Anual",
+    "Banco Mundial",
+    "Organismo internacional"
+)
+
+# 6. Desempleo
+desempleo_uy = banco_mundial_uruguay("SL.UEM.TOTL.ZS")
+add_row(
+    filas_uy,
+    "Tasa de desempleo total",
+    fmt_pct(desempleo_uy.get("value")) if desempleo_uy else "No disponible",
+    "%",
+    desempleo_uy.get("date", "") if desempleo_uy else "",
+    "Anual",
+    "Banco Mundial",
+    "Organismo internacional"
+)
+
+# 7. PBI nominal
+pbi_uy = banco_mundial_uruguay("NY.GDP.MKTP.CD")
+add_row(
+    filas_uy,
+    "PBI nominal",
+    fmt_num(pbi_uy.get("value")) if pbi_uy else "No disponible",
+    "USD corrientes",
+    pbi_uy.get("date", "") if pbi_uy else "",
+    "Anual",
+    "Banco Mundial",
+    "Organismo internacional"
+)
+
+df_uy = pd.DataFrame(filas_uy)
+
+st.dataframe(df_uy, use_container_width=True)
