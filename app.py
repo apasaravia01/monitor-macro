@@ -61,7 +61,7 @@ for nombre, idv, unidad in [
         v = buscar_bcra_por_id(idv)
         filas.append({
             "Indicador": nombre,
-            "Valor": v["ultValorInformado"],
+            "Valor": formatear_numero(v["ultValorInformado"]),
             "Unidad": unidad,
             "Fecha dato": v["ultFechaInformada"],
             "Periodicidad": "Diaria",
@@ -91,7 +91,7 @@ try:
     if tasa_oficial:
         filas.append({
             "Indicador": "Tasa de interés oficial / política monetaria",
-            "Valor": tasa_oficial["ultValorInformado"],
+            "Valor": formatear_porcentaje(tasa_oficial["ultValorInformado"]),
             "Unidad": "%",
             "Fecha dato": tasa_oficial["ultFechaInformada"],
             "Periodicidad": "Diaria",
@@ -159,7 +159,7 @@ try:
     pbi = serie_datos_gob("9.1_PDPC_2004_A_30")
     filas.append({
         "Indicador": "PBI en millones de USD corrientes",
-        "Valor": pbi[1],
+        "Valor": formatear_numero(pbi[1]),
         "Unidad": "millones de USD",
         "Fecha dato": pbi[0],
         "Periodicidad": "Trimestral",
