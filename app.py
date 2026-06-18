@@ -676,7 +676,7 @@ except Exception:
 add_row(
     filas_br,
     "Variación diaria tipo de cambio",
-    fmt_pct(var_tc_br) if var_tc_br is not None else "No disponible",
+    f"{var_tc_br:.2f}" if var_tc_br is not None else "No disponible",
     "%",
     bcb_fecha(tc_br_actual),
     "Diaria",
