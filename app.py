@@ -599,3 +599,193 @@ add_row(
 
 df_us = pd.DataFrame(filas_us)
 st.dataframe(df_us, use_container_width=True)
+# =========================
+# BRASIL
+# =========================
+
+st.subheader("Brasil")
+
+def banco_mundial_brasil(indicator):
+    try:
+        url = f"https://api.worldbank.org/v2/country/BRA/indicator/{indicator}"
+        js = get_json(url, {
+            "format": "json",
+            "mrnev": 1
+        })
+
+        data = js[1] if isinstance(js, list) and len(js) > 1 else []
+
+        for item in data:
+            if item.get("value") is not None:
+                return item
+
+        return None
+    except Exception:
+        return None
+
+def tipo_cambio_brasil():
+    try:
+        js = get_json("https://api.frankfurter.app/latest", {
+            "from": "USD",
+            "to": "BRL"
+        })
+
+        valor = js.get("rates", {}).get("BRL")
+        fecha = js.get("date", "")
+
+        return valor, fecha
+    except Exception:
+        return None, ""
+
+def variacion_diaria_brasil():
+    try:
+        js = get_json("https://api.frankfurter.app/latest", {
+            "from": "USD",
+            "to": "BRL"
+        })
+
+        fecha_actual = js.get("date", "")
+        valor_actual = js.get("rates", {}).get("BRL")
+
+        js_prev = get_json(f"https://api.frankfurter.app/{fecha_actual}", {
+            "from": "USD",
+            "to": "BRL"
+        })
+
+        valor_previo = js_prev.get("rates", {}).get("BRL")
+
+        if valor_actual and valor_previo and valor_previo != 0:
+            variacion = ((float(valor_actual) / float(valor_previo)) - 1) * 100
+            return variacion, fecha_actual
+
+        return None, fecha_actual
+    except Exception:
+        return None, ""
+
+filas_br = []
+
+# 0. Reservas internacionales
+reservas_br = banco_mundial_brasil("FI.RES.TOTL.CD")
+add_row(
+    filas_br,
+    "Reservas internacionales",
+    fmt_num(reservas_br.get("value")) if reservas_br else "No disponible",
+    "USD corrientes",
+    reservas_br.get("date", "") if reservas_br else "",
+    "Anual",
+    "Banco Mundial",
+    "Organismo internacional"
+)
+
+# 1. Tipo de cambio BRL/USD
+tc_br, fecha_tc_br = tipo_cambio_brasil()
+add_row(
+    filas_br,
+    "Tipo de cambio BRL/USD",
+    fmt_num(tc_br) if tc_br else "No disponible",
+    "BRL por USD",
+    fecha_tc_br,
+    "Diaria",
+    "Frankfurter / ECB",
+    "Mercado"
+)
+
+# 2. Variación diaria tipo de cambio
+var_br, fecha_var_br = variacion_diaria_brasil()
+add_row(
+    filas_br,
+    "Variación diaria tipo de cambio",
+    fmt_pct(var_br) if var_br is not None else "No disponible",
+    "%",
+    fecha_var_br,
+    "Diaria",
+    "Frankfurter / ECB",
+    "Mercado"
+)
+
+# 3. Inflación anual
+inflacion_br = banco_mundial_brasil("FP.CPI.TOTL.ZG")
+add_row(
+    filas_br,
+    "Inflación anual",
+    fmt_pct(inflacion_br.get("value")) if inflacion_br else "No disponible",
+    "%",
+    inflacion_br.get("date", "") if inflacion_br else "",
+    "Anual",
+    "Banco Mundial",
+    "Organismo internacional"
+)
+
+# 4. Tasa de desempleo total
+desempleo_br = banco_mundial_brasil("SL.UEM.TOTL.ZS")
+add_row(
+    filas_br,
+    "Tasa de desempleo total",
+    fmt_pct(desempleo_br.get("value")) if desempleo_br else "No disponible",
+    "%",
+    desempleo_br.get("date", "") if desempleo_br else "",
+    "Anual",
+    "Banco Mundial",
+    "Organismo internacional"
+)
+
+# 5. PBI nominal
+pbi_br = banco_mundial_brasil("NY.GDP.MKTP.CD")
+add_row(
+    filas_br,
+    "PBI nominal",
+    fmt_num(pbi_br.get("value")) if pbi_br else "No disponible",
+    "USD corrientes",
+    pbi_br.get("date", "") if pbi_br else "",
+    "Anual",
+    "Banco Mundial",
+    "Organismo internacional"
+)
+
+df_br = pd.DataFrame(filas_br)
+st.dataframe(df_br, use_container_width=True)
+# =========================
+# DESCARGA EXCEL
+# =========================
+
+from io import BytesIO
+
+df_argentina = df.copy()
+df_argentina["País"] = "Argentina"
+
+df_uruguay_export = df_uy.copy()
+df_uruguay_export["País"] = "Uruguay"
+
+df_usa_export = df_us.copy()
+df_usa_export["País"] = "Estados Unidos"
+
+df_brasil_export = df_br.copy()
+df_brasil_export["País"] = "Brasil"
+
+df_export = pd.concat(
+    [
+        df_argentina,
+        df_uruguay_export,
+        df_usa_export,
+        df_brasil_export
+    ],
+    ignore_index=True
+)
+
+output = BytesIO()
+
+with pd.ExcelWriter(output, engine="openpyxl") as writer:
+    df_argentina.to_excel(writer, sheet_name="Argentina", index=False)
+    df_uruguay_export.to_excel(writer, sheet_name="Uruguay", index=False)
+    df_usa_export.to_excel(writer, sheet_name="Estados Unidos", index=False)
+    df_brasil_export.to_excel(writer, sheet_name="Brasil", index=False)
+    df_export.to_excel(writer, sheet_name="Consolidado", index=False)
+
+excel_data = output.getvalue()
+
+st.download_button(
+    label="📥 Descargar Monitor Macroeconómico (Excel)",
+    data=excel_data,
+    file_name=f"Monitor_Macroeconomico_{datetime.now().strftime('%Y%m%d')}.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
