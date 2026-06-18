@@ -605,141 +605,126 @@ st.dataframe(df_us, use_container_width=True)
 
 st.subheader("Brasil")
 
-def banco_mundial_brasil(indicator):
+def bcb_sgs_ultimos(codigo, n=1):
     try:
-        url = f"https://api.worldbank.org/v2/country/BRA/indicator/{indicator}"
-        js = get_json(url, {
-            "format": "json",
-            "mrnev": 1
-        })
+        url = f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.{codigo}/dados/ultimos/{n}"
+        js = get_json(url, {"formato": "json"})
 
-        data = js[1] if isinstance(js, list) and len(js) > 1 else []
+        if not js:
+            return []
 
-        for item in data:
-            if item.get("value") is not None:
-                return item
+        return js
+    except Exception:
+        return []
 
-        return None
+def bcb_valor(item):
+    try:
+        return float(str(item.get("valor", "")).replace(",", "."))
     except Exception:
         return None
 
-def tipo_cambio_brasil():
-    try:
-        js = get_json("https://api.frankfurter.app/latest", {
-            "from": "USD",
-            "to": "BRL"
-        })
-
-        valor = js.get("rates", {}).get("BRL")
-        fecha = js.get("date", "")
-
-        return valor, fecha
-    except Exception:
-        return None, ""
-
-def variacion_diaria_brasil():
-    try:
-        js = get_json("https://api.frankfurter.app/latest", {
-            "from": "USD",
-            "to": "BRL"
-        })
-
-        fecha_actual = js.get("date", "")
-        valor_actual = js.get("rates", {}).get("BRL")
-
-        js_prev = get_json(f"https://api.frankfurter.app/{fecha_actual}", {
-            "from": "USD",
-            "to": "BRL"
-        })
-
-        valor_previo = js_prev.get("rates", {}).get("BRL")
-
-        if valor_actual and valor_previo and valor_previo != 0:
-            variacion = ((float(valor_actual) / float(valor_previo)) - 1) * 100
-            return variacion, fecha_actual
-
-        return None, fecha_actual
-    except Exception:
-        return None, ""
+def bcb_fecha(item):
+    return item.get("data", "") if item else ""
 
 filas_br = []
 
-# 0. Reservas internacionales
-reservas_br = banco_mundial_brasil("FI.RES.TOTL.CD")
+# 0. Reservas internacionales - BCB SGS 13621
+reservas_br_data = bcb_sgs_ultimos(13621, 1)
+reservas_br = reservas_br_data[-1] if reservas_br_data else None
+
 add_row(
     filas_br,
     "Reservas internacionales",
-    fmt_num(reservas_br.get("value")) if reservas_br else "No disponible",
-    "USD corrientes",
-    reservas_br.get("date", "") if reservas_br else "",
-    "Anual",
-    "Banco Mundial",
-    "Organismo internacional"
+    fmt_num(bcb_valor(reservas_br)) if reservas_br else "No disponible",
+    "millones de USD",
+    bcb_fecha(reservas_br),
+    "Diaria",
+    "Banco Central do Brasil / SGS 13621",
+    "Oficial"
 )
 
-# 1. Tipo de cambio BRL/USD
-tc_br, fecha_tc_br = tipo_cambio_brasil()
+# 1. Tipo de cambio BRL/USD - BCB SGS 1
+tc_br_data = bcb_sgs_ultimos(1, 2)
+tc_br_actual = tc_br_data[-1] if len(tc_br_data) >= 1 else None
+tc_br_previo = tc_br_data[-2] if len(tc_br_data) >= 2 else None
+
 add_row(
     filas_br,
     "Tipo de cambio BRL/USD",
-    fmt_num(tc_br) if tc_br else "No disponible",
+    fmt_num(bcb_valor(tc_br_actual)) if tc_br_actual else "No disponible",
     "BRL por USD",
-    fecha_tc_br,
+    bcb_fecha(tc_br_actual),
     "Diaria",
-    "Frankfurter / ECB",
-    "Mercado"
+    "Banco Central do Brasil / SGS 1",
+    "Oficial"
 )
 
 # 2. Variación diaria tipo de cambio
-var_br, fecha_var_br = variacion_diaria_brasil()
+try:
+    actual = bcb_valor(tc_br_actual)
+    previo = bcb_valor(tc_br_previo)
+
+    if actual is not None and previo is not None and previo != 0:
+        var_tc_br = ((actual / previo) - 1) * 100
+    else:
+        var_tc_br = None
+except Exception:
+    var_tc_br = None
+
 add_row(
     filas_br,
     "Variación diaria tipo de cambio",
-    fmt_pct(var_br) if var_br is not None else "No disponible",
+    fmt_pct(var_tc_br) if var_tc_br is not None else "No disponible",
     "%",
-    fecha_var_br,
+    bcb_fecha(tc_br_actual),
     "Diaria",
-    "Frankfurter / ECB",
-    "Mercado"
+    "Banco Central do Brasil / SGS 1",
+    "Oficial"
 )
 
-# 3. Inflación anual
-inflacion_br = banco_mundial_brasil("FP.CPI.TOTL.ZG")
+# 3. Inflación anual - IPCA acumulado 12 meses, BCB SGS 13522
+inflacion_br_data = bcb_sgs_ultimos(13522, 1)
+inflacion_br = inflacion_br_data[-1] if inflacion_br_data else None
+
 add_row(
     filas_br,
     "Inflación anual",
-    fmt_pct(inflacion_br.get("value")) if inflacion_br else "No disponible",
+    fmt_pct(bcb_valor(inflacion_br)) if inflacion_br else "No disponible",
     "%",
-    inflacion_br.get("date", "") if inflacion_br else "",
-    "Anual",
-    "Banco Mundial",
-    "Organismo internacional"
+    bcb_fecha(inflacion_br),
+    "Mensual",
+    "Banco Central do Brasil / SGS 13522",
+    "Oficial"
 )
 
-# 4. Tasa de desempleo total
-desempleo_br = banco_mundial_brasil("SL.UEM.TOTL.ZS")
+# 4. Tasa de desempleo total - PNADC / IBGE, BCB SGS 24369
+desempleo_br_data = bcb_sgs_ultimos(24369, 1)
+desempleo_br = desempleo_br_data[-1] if desempleo_br_data else None
+
 add_row(
     filas_br,
     "Tasa de desempleo total",
-    fmt_pct(desempleo_br.get("value")) if desempleo_br else "No disponible",
+    fmt_pct(bcb_valor(desempleo_br)) if desempleo_br else "No disponible",
     "%",
-    desempleo_br.get("date", "") if desempleo_br else "",
-    "Anual",
-    "Banco Mundial",
-    "Organismo internacional"
+    bcb_fecha(desempleo_br),
+    "Mensual",
+    "Banco Central do Brasil / SGS 24369 / IBGE PNADC",
+    "Oficial"
 )
 
-# 5. PBI nominal
-pbi_br = banco_mundial_brasil("NY.GDP.MKTP.CD")
+# 5. PBI nominal - BCB SGS 1207
+pbi_br_data = bcb_sgs_ultimos(1207, 1)
+pbi_br = pbi_br_data[-1] if pbi_br_data else None
+
 add_row(
     filas_br,
     "PBI nominal",
-    fmt_num(pbi_br.get("value")) if pbi_br else "No disponible",
-    "USD corrientes",
-    pbi_br.get("date", "") if pbi_br else "",
+    fmt_num(bcb_valor(pbi_br)) if pbi_br else "No disponible",
+    "BRL corrientes",
+    bcb_fecha(pbi_br),
     "Anual",
-    "Banco Mundial",
-    "Organismo internacional"
+    "Banco Central do Brasil / SGS 1207 / IBGE",
+    "Oficial"
 )
 
 df_br = pd.DataFrame(filas_br)
