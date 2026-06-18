@@ -603,17 +603,5 @@ add_row(
     "Mercado"
 )
 
-# 10. Russell 2000
-russell, fecha_russell = fred_latest("RU2000PR")
-add_row(
-    filas_us,
-    "Russell 2000",
-    fmt_num(russell) if russell is not None else "No disponible",
-    "índice",
-    fecha_russell,
-    "Diaria",
-    "FRED / FTSE Russell",
-    "Mercado"
-)
 df_us = pd.DataFrame(filas_us)
 st.dataframe(df_us, use_container_width=True)
