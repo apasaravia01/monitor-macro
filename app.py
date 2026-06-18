@@ -302,11 +302,7 @@ import re
 def banco_mundial_uruguay(indicator):
     try:
         url = f"https://api.worldbank.org/v2/country/URY/indicator/{indicator}"
-        js = get_json(url, {
-            "format": "json",
-            "mrnev": 1
-        })
-
+        js = get_json(url, {"format": "json", "mrnev": 1})
         data = js[1] if isinstance(js, list) and len(js) > 1 else []
 
         for item in data:
@@ -317,54 +313,56 @@ def banco_mundial_uruguay(indicator):
     except Exception:
         return None
 
-def tipo_cambio_uy_dgi():
+def tipo_cambio_uruguay_mercado():
     try:
-        url = "https://www.gub.uy/direccion-general-impositiva/datos-y-estadisticas/datos/cotizaciones-interbancarias"
-        r = requests.get(url, timeout=30)
-        r.raise_for_status()
-        texto = r.text
+        url = "https://economia.awesomeapi.com.br/json/last/USD-UYU"
+        js = get_json(url)
+        data = js.get("USDUYU", {})
 
-        # Busca valores tipo 38,8150 / 38.8150 en la página oficial
-        valores = re.findall(r"\b\d{2}[,.]\d{3,4}\b", texto)
-        valores = [float(v.replace(",", ".")) for v in valores]
+        valor = data.get("bid")
+        variacion = data.get("pctChange")
+        fecha = data.get("create_date", "")[:10]
 
-        # Filtra valores razonables para UYU/USD
-        valores = [v for v in valores if 20 <= v <= 80]
-
-        if len(valores) >= 2:
-            actual = valores[-1]
-            previo = valores[-2]
-            variacion = ((actual / previo) - 1) * 100 if previo != 0 else None
-            return actual, variacion
-
-        if len(valores) == 1:
-            return valores[-1], None
-
-        return None, None
+        return valor, variacion, fecha
     except Exception:
-        return None, None
+        return None, None, ""
 
-def tasa_politica_uruguay():
-    try:
-        url = "https://www.bcu.gub.uy/Politica-Economica-y-Mercados/Paginas/Tasa-1-Dia.aspx"
-        r = requests.get(url, timeout=30)
-        r.raise_for_status()
-        texto = r.text
+def tasa_politica_uruguay_bcu():
+    urls = [
+        "https://www.bcu.gub.uy/",
+        "https://www.bcu.gub.uy/Politica-Economica-y-Mercados/Paginas/Copom.aspx",
+        "https://www.bcu.gub.uy/Politica-Economica-y-Mercados/Paginas/Tasa-1-Dia.aspx"
+    ]
 
-        # Busca porcentajes tipo 5,75% / 5.75%
-        tasas = re.findall(r"\b\d{1,2}[,.]\d{1,2}\s*%", texto)
+    for url in urls:
+        try:
+            r = requests.get(url, timeout=30)
+            r.raise_for_status()
 
-        if tasas:
-            tasa = tasas[0].replace("%", "").replace(",", ".").strip()
-            return float(tasa)
+            texto = re.sub(r"<[^>]+>", " ", r.text)
+            texto = re.sub(r"\s+", " ", texto)
 
-        return None
-    except Exception:
-        return None
+            patrones = [
+                r"Tasa de Política Monetaria.{0,150}?(\d{1,2}[,.]\d{1,2})\s*%",
+                r"tasa de política monetaria.{0,150}?(\d{1,2}[,.]\d{1,2})\s*%",
+                r"TPM.{0,150}?(\d{1,2}[,.]\d{1,2})\s*%",
+                r"mantiene la tasa.{0,150}?(\d{1,2}[,.]\d{1,2})\s*%"
+            ]
+
+            for patron in patrones:
+                match = re.search(patron, texto, re.IGNORECASE)
+
+                if match:
+                    tasa = float(match.group(1).replace(",", "."))
+                    return tasa, datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
+
+        except Exception:
+            continue
+
+    return None, ""
 
 filas_uy = []
 
-# 1. Reservas internacionales
 reservas_uy = banco_mundial_uruguay("FI.RES.TOTL.CD")
 add_row(
     filas_uy,
@@ -377,46 +375,43 @@ add_row(
     "Organismo internacional"
 )
 
-# 2. Tipo de cambio UYU/USD y variación diaria
-tc_uy_valor, tc_uy_variacion = tipo_cambio_uy_dgi()
+tc_uy, var_tc_uy, fecha_tc_uy = tipo_cambio_uruguay_mercado()
 
 add_row(
     filas_uy,
     "Tipo de cambio UYU/USD",
-    fmt_num(tc_uy_valor) if tc_uy_valor else "No disponible",
+    fmt_num(tc_uy) if tc_uy else "No disponible",
     "UYU por USD",
-    datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d"),
+    fecha_tc_uy,
     "Diaria",
-    "DGI / Cotizaciones interbancarias",
-    "Oficial"
+    "AwesomeAPI mercado",
+    "Mercado"
 )
 
 add_row(
     filas_uy,
     "Variación diaria tipo de cambio",
-    fmt_pct(tc_uy_variacion) if tc_uy_variacion is not None else "No disponible",
+    fmt_pct(var_tc_uy) if var_tc_uy is not None else "No disponible",
     "%",
-    datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d"),
+    fecha_tc_uy,
     "Diaria",
-    "DGI / Cotizaciones interbancarias",
-    "Oficial"
+    "AwesomeAPI mercado",
+    "Mercado"
 )
 
-# 3. Tasa de interés oficial / política monetaria
-tasa_uy = tasa_politica_uruguay()
+tasa_uy, fecha_tasa_uy = tasa_politica_uruguay_bcu()
 
 add_row(
     filas_uy,
     "Tasa de interés oficial / política monetaria",
     fmt_pct(tasa_uy) if tasa_uy is not None else "No disponible",
     "% TNA",
-    datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d"),
-    "Diaria",
-    "BCU / Tasa 1 Día",
+    fecha_tasa_uy,
+    "Según decisión COPOM",
+    "BCU oficial",
     "Oficial"
 )
 
-# 4. Inflación
 inflacion_uy = banco_mundial_uruguay("FP.CPI.TOTL.ZG")
 add_row(
     filas_uy,
@@ -429,7 +424,6 @@ add_row(
     "Organismo internacional"
 )
 
-# 5. Desempleo
 desempleo_uy = banco_mundial_uruguay("SL.UEM.TOTL.ZS")
 add_row(
     filas_uy,
@@ -442,7 +436,6 @@ add_row(
     "Organismo internacional"
 )
 
-# 6. PBI nominal
 pbi_uy = banco_mundial_uruguay("NY.GDP.MKTP.CD")
 add_row(
     filas_uy,
@@ -456,5 +449,4 @@ add_row(
 )
 
 df_uy = pd.DataFrame(filas_uy)
-
 st.dataframe(df_uy, use_container_width=True)
