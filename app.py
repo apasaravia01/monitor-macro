@@ -446,3 +446,136 @@ add_row(
 df_uy = pd.DataFrame(filas_uy)
 
 st.dataframe(df_uy, use_container_width=True)
+# =========================
+# ESTADOS UNIDOS
+# =========================
+
+st.subheader("Estados Unidos")
+
+def fred_latest(series_id):
+    try:
+        url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
+        df = pd.read_csv(url)
+        df = df[df[series_id] != "."]
+        df[series_id] = pd.to_numeric(df[series_id], errors="coerce")
+        df = df.dropna()
+        last = df.iloc[-1]
+        return last[series_id], str(last["observation_date"])
+    except Exception:
+        return None, ""
+
+def fred_last_two(series_id):
+    try:
+        url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
+        df = pd.read_csv(url)
+        df = df[df[series_id] != "."]
+        df[series_id] = pd.to_numeric(df[series_id], errors="coerce")
+        df = df.dropna()
+        return df.tail(2)
+    except Exception:
+        return None
+
+def usd_eur_fx():
+    try:
+        js = get_json("https://api.frankfurter.app/latest", {
+            "from": "USD",
+            "to": "EUR"
+        })
+        valor = js.get("rates", {}).get("EUR")
+        fecha = js.get("date", "")
+        return valor, fecha
+    except Exception:
+        return None, ""
+
+filas_us = []
+
+# 1. Tipo de cambio USD/EUR
+usd_eur, fecha_fx = usd_eur_fx()
+add_row(
+    filas_us,
+    "Tipo de cambio USD/EUR",
+    fmt_num(usd_eur) if usd_eur else "No disponible",
+    "EUR por USD",
+    fecha_fx,
+    "Diaria",
+    "Frankfurter / ECB",
+    "Mercado"
+)
+
+# 3. Deuda nacional en USD
+deuda, fecha_deuda = fred_latest("GFDEBTN")
+add_row(
+    filas_us,
+    "Deuda nacional",
+    fmt_num(deuda) if deuda is not None else "No disponible",
+    "millones de USD",
+    fecha_deuda,
+    "Trimestral",
+    "FRED / U.S. Treasury",
+    "Oficial"
+)
+
+# 4. Tasa de interés oficial / política monetaria
+fed_rate, fecha_fed = fred_latest("FEDFUNDS")
+add_row(
+    filas_us,
+    "Tasa de interés oficial / política monetaria",
+    fmt_pct(fed_rate) if fed_rate is not None else "No disponible",
+    "% anual",
+    fecha_fed,
+    "Mensual",
+    "FRED / Federal Reserve",
+    "Oficial"
+)
+
+# 5. Inflación mensual
+cpi = fred_last_two("CPIAUCSL")
+
+if cpi is not None and len(cpi) == 2:
+    cpi_prev = cpi.iloc[0]["CPIAUCSL"]
+    cpi_last = cpi.iloc[1]["CPIAUCSL"]
+    fecha_cpi = str(cpi.iloc[1]["observation_date"])
+    inflacion_mensual = ((cpi_last / cpi_prev) - 1) * 100
+else:
+    inflacion_mensual = None
+    fecha_cpi = ""
+
+add_row(
+    filas_us,
+    "Inflación mensual",
+    fmt_pct(inflacion_mensual) if inflacion_mensual is not None else "No disponible",
+    "%",
+    fecha_cpi,
+    "Mensual",
+    "FRED / BLS",
+    "Oficial"
+)
+
+# 6. Tasa de desempleo total
+desempleo_us, fecha_desempleo_us = fred_latest("UNRATE")
+add_row(
+    filas_us,
+    "Tasa de desempleo total",
+    fmt_pct(desempleo_us) if desempleo_us is not None else "No disponible",
+    "%",
+    fecha_desempleo_us,
+    "Mensual",
+    "FRED / BLS",
+    "Oficial"
+)
+
+# 7. PBI nominal
+pbi_us, fecha_pbi_us = fred_latest("GDP")
+add_row(
+    filas_us,
+    "PBI nominal",
+    fmt_num(pbi_us) if pbi_us is not None else "No disponible",
+    "billones de USD anualizados",
+    fecha_pbi_us,
+    "Trimestral",
+    "FRED / BEA",
+    "Oficial"
+)
+
+df_us = pd.DataFrame(filas_us)
+st.dataframe(df_us, use_container_width=True)
