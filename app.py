@@ -402,49 +402,7 @@ add_row(
     "Oficial"
 )
 
-# 3. Tasa de interés oficial / política monetaria
 
-def tasa_politica_uruguay():
-    try:
-        urls = [
-            "https://www.bcu.gub.uy/Politica-Economica-y-Mercados/Paginas/Tasa-1-Dia.aspx",
-            "https://www.bcu.gub.uy/Politica-Economica-y-Mercados/Paginas/Copom.aspx",
-            "https://www.bcu.gub.uy/"
-        ]
-        import re
-        for url in urls:
-            r = requests.get(url, timeout=30)
-            r.raise_for_status()
-            texto = r.text
-            texto = re.sub(r"<[^>]*>", " ", texto)
-            texto = re.sub(r"\s+", " ", texto)
-            patrones = [
-                r"Tasa de Política Monetaria.{0,300}?(\d{1,2}[,.]\d{1,2})\s*%",
-                r"(\d{1,2}[,.]\d{1,2})\s*%[^%]{0,300}?Tasa de Política Monetaria",
-                r"TPM.{0,300}?(\d{1,2}[,.]\d{1,2})\s*%",
-                r"tasa de política monetaria.{0,300}?(\d{1,2}[,.]\d{1,2})\s*%"
-            ]
-            for patron in patrones:
-                match = re.search(patron, texto, re.IGNORECASE)
-                if match:
-                    valor = float(match.group(1).replace(",", "."))
-                    if 0 < valor < 100:
-                        return valor
-        return None
-    except Exception:
-        return None
-tasa_uy = tasa_politica_uruguay()
-
-add_row(
-    filas_uy,
-    "Tasa de interés oficial / política monetaria",
-    fmt_pct(tasa_uy) if tasa_uy is not None else "No disponible",
-    "% TNA",
-    datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d"),
-    "Diaria",
-    "BCU / Tasa de Política Monetaria",
-    "Oficial"
-)
 
 # 4. Inflación
 inflacion_uy = banco_mundial_uruguay("FP.CPI.TOTL.ZG")
