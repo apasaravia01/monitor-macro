@@ -403,8 +403,23 @@ add_row(
 )
 
 # 3. Tasa de interés oficial / política monetaria
-tasa_uy = tasa_politica_uruguay()
 
+def tasa_politica_uruguay():
+    try:
+        url = "https://www.bcu.gub.uy/"
+        r = requests.get(url, timeout=30)
+        r.raise_for_status()
+        texto = r.text
+        # Buscar valor cercano a "Tasa de Política Monetaria"
+        import re
+        patron = r"(\d{1,2}[,.]\d{1,2})\s*%\s*Tasa de Política Monetaria"
+        match = re.search(patron, texto, re.IGNORECASE)
+        if match:
+            return float(match.group(1).replace(",", "."))
+        return None
+    except Exception:
+        return None
+tasa_uy = tasa_politica_uruguay()
 add_row(
     filas_uy,
     "Tasa de interés oficial / política monetaria",
@@ -412,7 +427,7 @@ add_row(
     "% TNA",
     datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d"),
     "Diaria",
-    "BCU / Tasa 1 Día",
+    "BCU / Tasa de Política Monetaria",
     "Oficial"
 )
 
