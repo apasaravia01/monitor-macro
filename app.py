@@ -433,6 +433,18 @@ def tasa_politica_uruguay():
         return None
     except Exception:
         return None
+tasa_uy = tasa_politica_uruguay()
+
+add_row(
+    filas_uy,
+    "Tasa de interés oficial / política monetaria",
+    fmt_pct(tasa_uy) if tasa_uy is not None else "No disponible",
+    "% TNA",
+    datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d"),
+    "Diaria",
+    "BCU / Tasa de Política Monetaria",
+    "Oficial"
+)
 
 # 4. Inflación
 inflacion_uy = banco_mundial_uruguay("FP.CPI.TOTL.ZG")
