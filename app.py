@@ -296,11 +296,7 @@ import re
 def banco_mundial_uruguay(indicator):
     try:
         url = f"https://api.worldbank.org/v2/country/URY/indicator/{indicator}"
-        js = get_json(url, {
-            "format": "json",
-            "mrnev": 1
-        })
-
+        js = get_json(url, {"format": "json", "mrnev": 1})
         data = js[1] if isinstance(js, list) and len(js) > 1 else []
 
         for item in data:
@@ -311,54 +307,65 @@ def banco_mundial_uruguay(indicator):
     except Exception:
         return None
 
-def tipo_cambio_uy_dgi():
+def tipo_cambio_uruguay_dgi():
     try:
         url = "https://www.gub.uy/direccion-general-impositiva/datos-y-estadisticas/datos/cotizaciones-interbancarias"
         r = requests.get(url, timeout=30)
         r.raise_for_status()
-        texto = r.text
 
-        # Busca valores tipo 38,8150 / 38.8150 en la página oficial
-        valores = re.findall(r"\b\d{2}[,.]\d{3,4}\b", texto)
-        valores = [float(v.replace(",", ".")) for v in valores]
+        texto = re.sub(r"<[^>]+>", " ", r.text)
+        texto = re.sub(r"\s+", " ", texto)
 
-        # Filtra valores razonables para UYU/USD
-        valores = [v for v in valores if 20 <= v <= 80]
+        matches = re.findall(r"\b(\d{2})\s+(\d{2}[,.]\d{4})\b", texto)
+
+        valores = []
+        for dia, valor in matches:
+            v = float(valor.replace(",", "."))
+            if 20 <= v <= 80:
+                valores.append(v)
 
         if len(valores) >= 2:
             actual = valores[-1]
             previo = valores[-2]
             variacion = ((actual / previo) - 1) * 100 if previo != 0 else None
-            return actual, variacion
+            fecha = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
+            return actual, variacion, fecha
 
         if len(valores) == 1:
-            return valores[-1], None
+            fecha = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
+            return valores[-1], None, fecha
 
-        return None, None
+        return None, None, ""
+
     except Exception:
-        return None, None
+        return None, None, ""
 
-def tasa_politica_uruguay():
+def tasa_politica_uruguay_bcu():
     try:
         url = "https://www.bcu.gub.uy/Politica-Economica-y-Mercados/Paginas/Tasa-1-Dia.aspx"
         r = requests.get(url, timeout=30)
         r.raise_for_status()
-        texto = r.text
 
-        # Busca porcentajes tipo 5,75% / 5.75%
-        tasas = re.findall(r"\b\d{1,2}[,.]\d{1,2}\s*%", texto)
+        texto = re.sub(r"<[^>]+>", " ", r.text)
+        texto = re.sub(r"\s+", " ", texto)
 
-        if tasas:
-            tasa = tasas[0].replace("%", "").replace(",", ".").strip()
-            return float(tasa)
+        match = re.search(
+            r"(\d{2}/\d{2}/\d{4})\s+(\d{1,2}[,.]\d{1,2})\s*%",
+            texto
+        )
 
-        return None
+        if match:
+            fecha = match.group(1)
+            tasa = float(match.group(2).replace(",", "."))
+            return tasa, fecha
+
+        return None, ""
+
     except Exception:
-        return None
+        return None, ""
 
 filas_uy = []
 
-# 1. Reservas internacionales
 reservas_uy = banco_mundial_uruguay("FI.RES.TOTL.CD")
 add_row(
     filas_uy,
@@ -371,34 +378,43 @@ add_row(
     "Organismo internacional"
 )
 
-# 2. Tipo de cambio UYU/USD y variación diaria
-tc_uy_valor, tc_uy_variacion = tipo_cambio_uy_dgi()
+tc_uy, var_tc_uy, fecha_tc_uy = tipo_cambio_uruguay_dgi()
 
 add_row(
     filas_uy,
     "Tipo de cambio UYU/USD",
-    fmt_num(tc_uy_valor) if tc_uy_valor else "No disponible",
+    fmt_num(tc_uy) if tc_uy is not None else "No disponible",
     "UYU por USD",
-    datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d"),
+    fecha_tc_uy,
     "Diaria",
-    "DGI / Cotizaciones interbancarias",
+    "DGI Uruguay / Cotizaciones interbancarias",
     "Oficial"
 )
 
 add_row(
     filas_uy,
     "Variación diaria tipo de cambio",
-    fmt_pct(tc_uy_variacion) if tc_uy_variacion is not None else "No disponible",
+    f"{var_tc_uy:.2f}" if var_tc_uy is not None else "No disponible",
     "%",
-    datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d"),
+    fecha_tc_uy,
     "Diaria",
-    "DGI / Cotizaciones interbancarias",
+    "DGI Uruguay / Cotizaciones interbancarias",
     "Oficial"
 )
 
+tasa_uy, fecha_tasa_uy = tasa_politica_uruguay_bcu()
 
+add_row(
+    filas_uy,
+    "Tasa de interés oficial / política monetaria",
+    f"{tasa_uy:.2f}" if tasa_uy is not None else "No disponible",
+    "% TNA",
+    fecha_tasa_uy,
+    "Diaria",
+    "BCU / Tasa 1 Día",
+    "Oficial"
+)
 
-# 4. Inflación
 inflacion_uy = banco_mundial_uruguay("FP.CPI.TOTL.ZG")
 add_row(
     filas_uy,
@@ -411,7 +427,6 @@ add_row(
     "Organismo internacional"
 )
 
-# 5. Desempleo
 desempleo_uy = banco_mundial_uruguay("SL.UEM.TOTL.ZS")
 add_row(
     filas_uy,
@@ -424,7 +439,6 @@ add_row(
     "Organismo internacional"
 )
 
-# 6. PBI nominal
 pbi_uy = banco_mundial_uruguay("NY.GDP.MKTP.CD")
 add_row(
     filas_uy,
@@ -438,7 +452,6 @@ add_row(
 )
 
 df_uy = pd.DataFrame(filas_uy)
-
 st.dataframe(df_uy, use_container_width=True)
 # =========================
 # ESTADOS UNIDOS
