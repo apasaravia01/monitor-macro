@@ -273,12 +273,6 @@ df = pd.DataFrame(filas)
 
 st.dataframe(df, use_container_width=True)
 
-st.download_button(
-    "Descargar datos en CSV",
-    df.to_csv(index=False).encode("utf-8"),
-    "monitor_macro_argentina.csv",
-    "text/csv"
-)
 
 st.caption(
     "Fecha y hora de consulta: "
