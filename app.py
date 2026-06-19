@@ -292,47 +292,92 @@ st.markdown("""
 st.subheader("Uruguay")
 
 import re
+from io import BytesIO
 
-def banco_mundial_uruguay(indicator):
+def limpiar_html(texto):
+    texto = re.sub(r"<[^>]+>", " ", texto)
+    texto = re.sub(r"\s+", " ", texto)
+    return texto
+
+def numero_desde_texto(x):
     try:
-        url = f"https://api.worldbank.org/v2/country/URY/indicator/{indicator}"
-        js = get_json(url, {"format": "json", "mrnev": 1})
-        data = js[1] if isinstance(js, list) and len(js) > 1 else []
-
-        for item in data:
-            if item.get("value") is not None:
-                return item
-
-        return None
+        return float(str(x).replace(".", "").replace(",", "."))
     except Exception:
         return None
 
-def tipo_cambio_uruguay_dgi():
+def uruguay_tpm_bcu():
+    try:
+        url = "https://www.bcu.gub.uy/"
+        r = requests.get(url, timeout=30)
+        r.raise_for_status()
+        texto = limpiar_html(r.text)
+
+        patrones = [
+            r"Tasa de Política Monetaria\s*(\d{1,2}[,.]\d{1,2})\s*%",
+            r"(\d{1,2}[,.]\d{1,2})\s*%\s*Tasa de Política Monetaria"
+        ]
+
+        for patron in patrones:
+            m = re.search(patron, texto, re.IGNORECASE)
+            if m:
+                return float(m.group(1).replace(",", ".")), datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
+
+        return None, ""
+    except Exception:
+        return None, ""
+
+def uruguay_ine_ipc_desempleo():
+    try:
+        url = "https://www.gub.uy/instituto-nacional-estadistica/comunicacion/publicaciones"
+        r = requests.get(url, timeout=30)
+        r.raise_for_status()
+        texto = limpiar_html(r.text)
+
+        inflacion = None
+        desempleo = None
+        fecha = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
+
+        m_ipc = re.search(
+            r"IPC.*?últimos 12 meses de\s*(\d{1,2}[,.]\d{1,2})\s*%",
+            texto,
+            re.IGNORECASE
+        )
+        if m_ipc:
+            inflacion = float(m_ipc.group(1).replace(",", "."))
+
+        m_des = re.search(
+            r"tasa de desempleo en\s*(\d{1,2}[,.]\d{1,2})\s*%",
+            texto,
+            re.IGNORECASE
+        )
+        if m_des:
+            desempleo = float(m_des.group(1).replace(",", "."))
+
+        return inflacion, desempleo, fecha
+
+    except Exception:
+        return None, None, ""
+
+def uruguay_fx_dgi():
     try:
         url = "https://www.gub.uy/direccion-general-impositiva/datos-y-estadisticas/datos/cotizaciones-interbancarias"
         r = requests.get(url, timeout=30)
         r.raise_for_status()
+        texto = limpiar_html(r.text)
 
-        texto = re.sub(r"<[^>]+>", " ", r.text)
-        texto = re.sub(r"\s+", " ", texto)
+        valores = re.findall(r"\b\d{2}[,.]\d{3,4}\b", texto)
+        valores = [float(v.replace(",", ".")) for v in valores]
+        valores = [v for v in valores if 20 <= v <= 80]
 
-        matches = re.findall(r"\b(\d{2})\s+(\d{2}[,.]\d{4})\b", texto)
-
-        valores = []
-        for dia, valor in matches:
-            v = float(valor.replace(",", "."))
-            if 20 <= v <= 80:
-                valores.append(v)
+        fecha = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
 
         if len(valores) >= 2:
             actual = valores[-1]
             previo = valores[-2]
             variacion = ((actual / previo) - 1) * 100 if previo != 0 else None
-            fecha = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
             return actual, variacion, fecha
 
         if len(valores) == 1:
-            fecha = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
             return valores[-1], None, fecha
 
         return None, None, ""
@@ -340,46 +385,94 @@ def tipo_cambio_uruguay_dgi():
     except Exception:
         return None, None, ""
 
-def tasa_politica_uruguay_bcu():
+def uruguay_reservas_bcu():
     try:
-        url = "https://www.bcu.gub.uy/Politica-Economica-y-Mercados/Paginas/Tasa-1-Dia.aspx"
+        url = "https://www.bcu.gub.uy/Estadisticas-e-Indicadores/MonedayCredito/Activos-de-Reserva/reservas.xls"
         r = requests.get(url, timeout=30)
         r.raise_for_status()
 
-        texto = re.sub(r"<[^>]+>", " ", r.text)
-        texto = re.sub(r"\s+", " ", texto)
+        df_res = pd.read_excel(BytesIO(r.content), header=None)
 
-        match = re.search(
-            r"(\d{2}/\d{2}/\d{4})\s+(\d{1,2}[,.]\d{1,2})\s*%",
-            texto
+        ult_fecha = ""
+        ult_valor = None
+
+        for _, row in df_res.iterrows():
+            valores = list(row)
+
+            fecha_posible = None
+            valor_posible = None
+
+            for v in valores:
+                if hasattr(v, "strftime"):
+                    fecha_posible = v.strftime("%Y-%m-%d")
+
+            numeros = []
+            for v in valores:
+                n = pd.to_numeric(v, errors="coerce")
+                if pd.notna(n):
+                    numeros.append(float(n))
+
+            if fecha_posible and numeros:
+                valor_posible = max(numeros)
+
+            if fecha_posible and valor_posible:
+                ult_fecha = fecha_posible
+                ult_valor = valor_posible
+
+        return ult_valor, ult_fecha
+
+    except Exception:
+        return None, ""
+
+def uruguay_pbi_datos_gub():
+    try:
+        resource_id = "9d26889d-a2aa-44b9-ac4f-f6da69680584"
+        meta = get_json(
+            "https://catalogodatos.gub.uy/api/3/action/resource_show",
+            {"id": resource_id}
         )
 
-        if match:
-            fecha = match.group(1)
-            tasa = float(match.group(2).replace(",", "."))
-            return tasa, fecha
+        csv_url = meta.get("result", {}).get("url", "")
+        if not csv_url:
+            return None, ""
 
-        return None, ""
+        try:
+            df_pbi = pd.read_csv(csv_url)
+        except Exception:
+            df_pbi = pd.read_csv(csv_url, sep=";")
+
+        df_pbi = df_pbi.dropna(how="all")
+        last = df_pbi.iloc[-1]
+
+        fecha = str(last.iloc[0])
+
+        valor = None
+        for v in reversed(list(last)):
+            n = numero_desde_texto(v)
+            if n is not None:
+                valor = n
+                break
+
+        return valor, fecha
 
     except Exception:
         return None, ""
 
 filas_uy = []
 
-reservas_uy = banco_mundial_uruguay("FI.RES.TOTL.CD")
+reservas_uy, fecha_reservas_uy = uruguay_reservas_bcu()
 add_row(
     filas_uy,
     "Reservas internacionales",
-    fmt_num(reservas_uy.get("value")) if reservas_uy else "No disponible",
-    "USD corrientes",
-    reservas_uy.get("date", "") if reservas_uy else "",
-    "Anual",
-    "Banco Mundial",
-    "Organismo internacional"
+    fmt_num(reservas_uy) if reservas_uy is not None else "No disponible",
+    "millones de USD",
+    fecha_reservas_uy,
+    "Diaria",
+    "BCU / Activos de reserva",
+    "Oficial"
 )
 
-tc_uy, var_tc_uy, fecha_tc_uy = tipo_cambio_uruguay_dgi()
-
+tc_uy, var_tc_uy, fecha_tc_uy = uruguay_fx_dgi()
 add_row(
     filas_uy,
     "Tipo de cambio UYU/USD",
@@ -402,53 +495,51 @@ add_row(
     "Oficial"
 )
 
-tasa_uy, fecha_tasa_uy = tasa_politica_uruguay_bcu()
-
+tasa_uy, fecha_tasa_uy = uruguay_tpm_bcu()
 add_row(
     filas_uy,
     "Tasa de interés oficial / política monetaria",
     f"{tasa_uy:.2f}" if tasa_uy is not None else "No disponible",
     "% TNA",
     fecha_tasa_uy,
-    "Diaria",
-    "BCU / Tasa 1 Día",
+    "Según decisión COPOM",
+    "BCU oficial",
     "Oficial"
 )
 
-inflacion_uy = banco_mundial_uruguay("FP.CPI.TOTL.ZG")
+inflacion_uy, desempleo_uy, fecha_ine_uy = uruguay_ine_ipc_desempleo()
 add_row(
     filas_uy,
     "Inflación anual",
-    fmt_pct(inflacion_uy.get("value")) if inflacion_uy else "No disponible",
+    f"{inflacion_uy:.2f}" if inflacion_uy is not None else "No disponible",
     "%",
-    inflacion_uy.get("date", "") if inflacion_uy else "",
-    "Anual",
-    "Banco Mundial",
-    "Organismo internacional"
+    fecha_ine_uy,
+    "Mensual",
+    "INE Uruguay / IPC",
+    "Oficial"
 )
 
-desempleo_uy = banco_mundial_uruguay("SL.UEM.TOTL.ZS")
 add_row(
     filas_uy,
     "Tasa de desempleo total",
-    fmt_pct(desempleo_uy.get("value")) if desempleo_uy else "No disponible",
+    f"{desempleo_uy:.2f}" if desempleo_uy is not None else "No disponible",
     "%",
-    desempleo_uy.get("date", "") if desempleo_uy else "",
-    "Anual",
-    "Banco Mundial",
-    "Organismo internacional"
+    fecha_ine_uy,
+    "Mensual",
+    "INE Uruguay / ECH",
+    "Oficial"
 )
 
-pbi_uy = banco_mundial_uruguay("NY.GDP.MKTP.CD")
+pbi_uy, fecha_pbi_uy = uruguay_pbi_datos_gub()
 add_row(
     filas_uy,
     "PBI nominal",
-    fmt_num(pbi_uy.get("value")) if pbi_uy else "No disponible",
-    "USD corrientes",
-    pbi_uy.get("date", "") if pbi_uy else "",
+    fmt_num(pbi_uy) if pbi_uy is not None else "No disponible",
+    "miles de pesos corrientes",
+    fecha_pbi_uy,
     "Anual",
-    "Banco Mundial",
-    "Organismo internacional"
+    "datos.gub.uy / MIDES",
+    "Oficial"
 )
 
 df_uy = pd.DataFrame(filas_uy)
